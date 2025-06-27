@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineMatch - Movie Recommendations</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-film"></i>
+                <span>CineMatch</span>
+            </div>
+            <nav class="nav">
+                <a href="#home" class="nav-link active">Home</a>
+                <a href="#recommendations" class="nav-link">Recommendations</a>
+                <a href="#search" class="nav-link">Search</a>
+                <a href="#popular" class="nav-link">Popular</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-background"></div>
+        <div class="hero-content">
+            <h1 class="hero-title">Find Your Next Favorite Movie</h1>
+            <p class="hero-subtitle">Discover amazing movies tailored to your taste with our smart recommendation system</p>
+            <button type="button" class="cta-button" onclick="scrollToRecommendations()">
+                <i class="fas fa-magic"></i> Get Recommendations
+            </button>
+        </div>
+    </section>
+
+    <!-- Recommendations Section -->
+    <section id="recommendations" class="section">
+        <div class="container">
+            <h2 class="section-title">Get Personalized Recommendations</h2>
+            <form class="recommendation-form" id="recommendationForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="movieTitle">Based on Movie (Optional)</label>
+                        <input type="text" id="movieTitle" name="movieTitle" placeholder="Enter a movie you like...">
+                    </div>
+                    <div class="form-group">
+                        <label for="genre">Preferred Genre</label>
+                        <select id="genre" name="genre">
+                            <option value="">Any Genre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="minRating">Minimum Rating</label>
+                        <input type="number" id="minRating" name="minRating" min="0" max="10" step="0.1" value="7.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxResults">Number of Results</label>
+                        <input type="number" id="maxResults" name="maxResults" min="1" max="20" value="10">
+                    </div>
+                </div>
+                <button type="submit" class="recommend-button">
+                    <i class="fas fa-search"></i> Get Recommendations
+                </button>
+            </form>
+
+            <div class="recommendations" id="recommendationsSection" style="display: none;">
+                <h3 class="recommendations-title">Recommended Movies</h3>
+                <div class="movies-grid" id="recommendationsGrid"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Search Section -->
+    <section id="search" class="section section-alt">
+        <div class="container">
+            <h2 class="section-title">Search Movies</h2>
+            <form class="search-form" id="searchForm">
+                <div class="search-input-group">
+                    <input type="text" id="searchInput" placeholder="Search for movies..." required>
+                    <button type="submit" aria-label="Search">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                        <span class="sr-only">Search</span>
+                    </button>
+                </div>
+            </form>
+
+            <div class="movies-grid" id="searchResults"></div>
+        </div>
+    </section>
+
+    <!-- Popular Movies Section -->
+    <section id="popular" class="section">
+        <div class="container">
+            <h2 class="section-title">Popular Movies</h2>
+            <div class="movies-grid" id="popularMovies"></div>
+        </div>
+    </section>
+
+    <!-- Movie Details Modal -->
+    <div class="modal hidden" id="movieModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div class="movie-details" id="movieDetails">
+                <!-- Movie details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading hidden" id="loading">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 CineMatch. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // API Base URL
+        const API_BASE = '/api';
+
+        // DOM Elements
+        const recommendationForm = document.getElementById('recommendationForm');
+        const searchForm = document.getElementById('searchForm');
+        const genreSelect = document.getElementById('genre');
+        const recommendationsSection = document.getElementById('recommendationsSection');
+        const recommendationsGrid = document.getElementById('recommendationsGrid');
+        const searchResults = document.getElementById('searchResults');
+        const popularMovies = document.getElementById('popularMovies');
+        const movieModal = document.getElementById('movieModal');
+        const movieDetails = document.getElementById('movieDetails');
+        const loading = document.getElementById('loading');
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGenres();
+            loadPopularMovies();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            recommendationForm.addEventListener('submit', handleRecommendationSubmit);
+            searchForm.addEventListener('submit', handleSearchSubmit);
+            
+            // Smooth scrolling for navigation
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth' });
+                    }
+                });
+            });
+
+            // Close modal when clicking outside
+            movieModal.addEventListener('click', function(e) {
+                if (e.target === movieModal) {
+                    closeModal();
+                }
+            });
+        }
+
+        async function loadGenres() {
+            try {
+                const response = await fetch(`${API_BASE}/genres`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    genreSelect.innerHTML = '<option value="">Any Genre</option>';
+                    data.genres.forEach(genre => {
+                        const option = document.createElement('option');
+                        option.value = genre;
+                        option.textContent = genre;
+                        genreSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading genres:', error);
+            }
+        }
+
+        async function loadPopularMovies() {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}/popular?limit=12`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayMovies(data.movies, popularMovies);
+                }
+            } catch (error) {
+                console.error('Error loading popular movies:', error);
+                popularMovies.innerHTML = '<div class="no-results">Error loading popular movies</div>';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function handleRecommendationSubmit(e) {
+            e.preventDefault();
+            showLoading();
+
+            const formData = new FormData(recommendationForm);
+            const requestData = {
+                movie_title: formData.get('movieTitle') || '',
+                genre: formData.get('genre') || '',
+                min_rating: parseFloat(formData.get('minRating') || 0),
+                max_results: parseInt(formData.get('maxResults') || 10)
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/recommend`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayMovies(data.recommendations, recommendationsGrid);
+                    recommendationsSection.style.display = 'block';
+                    recommendationsSection.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    recommendationsGrid.innerHTML = '<div class="no-results">No recommendations found</div>';
+                    recommendationsSection.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error getting recommendations:', error);
+                recommendationsGrid.innerHTML = '<div class="no-results">Error getting recommendations</div>';
+                recommendationsSection.style.display = 'block';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function handleSearchSubmit(e) {
+            e.preventDefault();
+            const query = document.getElementById('searchInput').value.trim();
+            
+            if (!query) return;
+
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.success && data.results.length > 0) {
+                    displayMovies(data.results, searchResults);
+                } else {
+                    searchResults.innerHTML = '<div class="no-results">No movies found for your search</div>';
+                }
+            } catch (error) {
+                console.error('Error searching movies:', error);
+                searchResults.innerHTML = '<div class="no-results">Error searching movies</div>';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayMovies(movies, container) {
+            if (!movies || movies.length === 0) {
+                container.innerHTML = '<div class="no-results">No movies to display</div>';
+                return;
+            }
+
+            container.innerHTML = movies.map(movie => `
+                <div class="movie-card" onclick="showMovieDetails(${movie.id})">
+                    <div class="movie-poster">
+                        <i class="fas fa-film"></i>
+                    </div>
+                    <div class="movie-info">
+                        <h3 class="movie-title">${movie.title}</h3>
+                        <div class="movie-meta">
+                            <span class="movie-year">${movie.year}</span>
+                            <span class="movie-rating">
+                                <i class="fas fa-star"></i>
+                                ${movie.rating}
+                            </span>
+                        </div>
+                        <div class="movie-genre">${movie.genre}</div>
+                        <div class="movie-director">Directed by ${movie.director}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function showMovieDetails(movieId) {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}/movie/${movieId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const movie = data.movie;
+                    movieDetails.innerHTML = `
+                        <div class="movie-poster-large">
+                            <i class="fas fa-film"></i>
+                        </div>
+                        <div class="movie-info-detailed">
+                            <h2>${movie.title}</h2>
+                            <div class="movie-meta-detailed">
+                                <span>${movie.year}</span>
+                                <span class="rating">★ ${movie.rating}</span>
+                                <span>${movie.duration} min</span>
+                            </div>
+                            <div class="genre-tag">${movie.genre}</div>
+                            <p><strong>Director:</strong> ${movie.director}</p>
+                            <p><strong>Cast:</strong> ${movie.cast}</p>
+                            <p class="description">${movie.description}</p>
+                        </div>
+                    `;
+                    movieModal.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading movie details:', error);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function closeModal() {
+            movieModal.classList.add('hidden');
+        }
+
+        function showLoading() {
+            loading.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        function scrollToRecommendations() {
+            document.getElementById('recommendations').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
