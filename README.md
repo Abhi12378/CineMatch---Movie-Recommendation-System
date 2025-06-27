@@ -2,6 +2,8 @@
 
 A powerful and intelligent movie recommendation system built with Flask REST API and modern web technologies. CineMatch uses advanced machine learning algorithms to provide personalized movie recommendations based on content similarity, genres, ratings, and user preferences.
 
+![app](https://github.com/user-attachments/assets/af1c9554-bab9-48b7-ba81-303555b0ed55)
+
 ## ✨ Features
 
 - **🤖 Smart Recommendations**: Content-based filtering using TF-IDF vectorization and cosine similarity
